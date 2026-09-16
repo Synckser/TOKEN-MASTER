@@ -32,6 +32,7 @@
 		D1CDB7D5CE8D9746ACEC7735 /* TokenMasterApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = B60A4A06FE776A948A539237 /* TokenMasterApp.swift */; };
 		D5C69EE9D8A2CF7DA54FA37F /* Advisor.swift in Sources */ = {isa = PBXBuildFile; fileRef = AD64A9AB2ABC17752BC4D736 /* Advisor.swift */; };
 		E32582A58088AC13D1390B70 /* HealthChecker.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1F8C2E622DB74D46ABAF8C57 /* HealthChecker.swift */; };
+		EE46F540F9DF9C9B9AC447A1 /* ClaudeOAuth.swift in Sources */ = {isa = PBXBuildFile; fileRef = BFFAF224CA21566D2FCBE94F /* ClaudeOAuth.swift */; };
 		F8F211A4E0F9C98DEC0175FE /* ClearVsCompactRule.swift in Sources */ = {isa = PBXBuildFile; fileRef = 666B982EC2702E83A5071583 /* ClearVsCompactRule.swift */; };
 		F93350900752CB5D3643CB06 /* ResetEstimator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 11C54EC3CDD1270AD6F743AA /* ResetEstimator.swift */; };
 /* End PBXBuildFile section */
@@ -60,6 +61,7 @@
 		A81B1E6C092EFB867BDBC076 /* CavemanRule.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CavemanRule.swift; sourceTree = "<group>"; };
 		AD64A9AB2ABC17752BC4D736 /* Advisor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Advisor.swift; sourceTree = "<group>"; };
 		B60A4A06FE776A948A539237 /* TokenMasterApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TokenMasterApp.swift; sourceTree = "<group>"; };
+		BFFAF224CA21566D2FCBE94F /* ClaudeOAuth.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClaudeOAuth.swift; sourceTree = "<group>"; };
 		C3B4FE421836B8735EE837B2 /* OptimizerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OptimizerView.swift; sourceTree = "<group>"; };
 		C57C9B6EB6DEF13A04A205DA /* ClaudeUsageAPI.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClaudeUsageAPI.swift; sourceTree = "<group>"; };
 		C67840169F97D51023C037E6 /* Pricing.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Pricing.swift; sourceTree = "<group>"; };
@@ -112,6 +114,7 @@
 		6A68E4673FB3398654FDB17A /* Readers */ = {
 			isa = PBXGroup;
 			children = (
+				BFFAF224CA21566D2FCBE94F /* ClaudeOAuth.swift */,
 				C57C9B6EB6DEF13A04A205DA /* ClaudeUsageAPI.swift */,
 				3BAD47A7A65C495385C972C5 /* ClaudeUsageReader.swift */,
 				5B9778ED981428C59BA9F059 /* CodexRateLimitReader.swift */,
@@ -239,6 +242,7 @@
 			files = (
 				D5C69EE9D8A2CF7DA54FA37F /* Advisor.swift in Sources */,
 				571ECF6207D1EB23DE1BA6F8 /* CavemanRule.swift in Sources */,
+				EE46F540F9DF9C9B9AC447A1 /* ClaudeOAuth.swift in Sources */,
 				C066CFF45F7FA68452AAD9A2 /* ClaudeUsageAPI.swift in Sources */,
 				6366380C2E61D8A055F8602A /* ClaudeUsageReader.swift in Sources */,
 				F8F211A4E0F9C98DEC0175FE /* ClearVsCompactRule.swift in Sources */,

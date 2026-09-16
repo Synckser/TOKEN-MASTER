@@ -20,7 +20,7 @@ struct TokenMasterApp: App {
         .windowResizability(.contentMinSize)
 
         Settings {
-            SettingsView()
+            SettingsView(store: store)
         }
     }
 }

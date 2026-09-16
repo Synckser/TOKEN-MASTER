@@ -44,7 +44,7 @@ final class UsageStore {
     @ObservationIgnored private var started = false
     @ObservationIgnored private var lastUsageFetch: Date?
     @ObservationIgnored private var usageBackoffUntil: Date?
-    private let usageMinInterval: TimeInterval = 600   // usage API quota is low — poll gently
+    private let usageMinInterval: TimeInterval = 90    // near-live with our own token
     private let usageBackoff: TimeInterval = 1800      // 30-min cool-down after a 429
     @ObservationIgnored private let claudeUsageCache = FileManager.default
         .urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
@@ -153,6 +153,14 @@ final class UsageStore {
     /// Age of the Claude number in seconds, or nil if never fetched live.
     func claudeUsageAge() -> TimeInterval? {
         claudeUsageAsOf.map { now.timeIntervalSince($0) }
+    }
+
+    /// Clear any cool-down/throttle and fetch immediately — e.g. right after the
+    /// user signs in with their own account (fresh token, fresh budget).
+    func forceUsageNow() {
+        usageBackoffUntil = nil
+        lastUsageFetch = nil
+        refresh(force: true)
     }
 
     /// Schedules one forced fetch just after the next window rollover, so the app

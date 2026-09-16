@@ -1,14 +1,61 @@
 import SwiftUI
 import ServiceManagement
+import AppKit
 
 struct SettingsView: View {
+    @Bindable var store: UsageStore
     @Bindable private var prefs = Prefs.shared
     @State private var launchAtLogin = SMAppService.mainApp.status == .enabled
     @State private var error: String?
 
+    // Claude account (own OAuth) state.
+    @State private var connected = ClaudeOAuth.shared.isConnected
+    @State private var pastedCode = ""
+    @State private var signingIn = false
+    @State private var authError: String?
+
     var body: some View {
         Form {
-            Section("Usage budgets (per 5h window)") {
+            Section("Claude account") {
+                if connected {
+                    LabeledContent("Status") {
+                        Label("Connected", systemImage: "checkmark.seal.fill")
+                            .foregroundStyle(.green)
+                    }
+                    Text("TOKEN MASTER uses its own token for live, accurate Claude usage.")
+                        .font(.caption).foregroundStyle(.secondary)
+                    Button("Sign out") {
+                        ClaudeOAuth.shared.signOut()
+                        connected = false; signingIn = false; pastedCode = ""
+                    }
+                } else if signingIn {
+                    Text("1. A Claude page opened in your browser. Approve access.\n"
+                        + "2. Copy the code it shows and paste it here:")
+                        .font(.caption).foregroundStyle(.secondary)
+                    HStack {
+                        TextField("Paste code", text: $pastedCode)
+                            .textFieldStyle(.roundedBorder)
+                        Button("Connect") { connect() }
+                            .buttonStyle(.borderedProminent)
+                            .disabled(pastedCode.trimmingCharacters(in: .whitespaces).isEmpty)
+                    }
+                    Button("Cancel") { signingIn = false; pastedCode = "" }
+                    if let authError {
+                        Text(authError).font(.caption).foregroundStyle(.red)
+                    }
+                } else {
+                    Text("Sign in so the meter reads your live Claude usage (its own token "
+                        + "avoids the shared rate limit).")
+                        .font(.caption).foregroundStyle(.secondary)
+                    Button("Sign in to Claude") {
+                        let url = ClaudeOAuth.shared.authorizeURLString()
+                        if let u = URL(string: url) { NSWorkspace.shared.open(u) }
+                        signingIn = true; authError = nil
+                    }
+                }
+            }
+
+            Section("Usage budgets (fallback only)") {
                 budgetField("Claude", millions($prefs.claudeBudget5h))
                 budgetField("ChatGPT / Codex", millions($prefs.codexBudget5h))
                 Text("The meter fills toward this. Set it to the comfortable ceiling for "
@@ -75,6 +122,19 @@ struct SettingsView: View {
             get: { Double(b.wrappedValue) / 1_000_000 },
             set: { b.wrappedValue = max(0, Int($0 * 1_000_000)) }
         )
+    }
+
+    private func connect() {
+        do {
+            try ClaudeOAuth.shared.completeLogin(pasted: pastedCode)
+            connected = true
+            signingIn = false
+            pastedCode = ""
+            authError = nil
+            store.forceUsageNow()   // fetch live immediately with the new token
+        } catch {
+            authError = error.localizedDescription
+        }
     }
 
     private func setLaunch(_ on: Bool) {

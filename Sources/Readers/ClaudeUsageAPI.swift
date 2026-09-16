@@ -52,14 +52,16 @@ final class ClaudeUsageAPI: @unchecked Sendable {
                            resetsAt: ProviderUsage.parseISO(d["resets_at"] as? String))
     }
 
-    /// Reads the OAuth access token from the Keychain item Claude Code created.
-    ///
-    /// We shell out to `/usr/bin/security` rather than use SecItem directly: the
-    /// keychain ACL trusts the *accessing binary*, and an unsigned app's identity
-    /// changes on every rebuild (so "Always Allow" never sticks). `security` is a
-    /// stable, already-trusted accessor, so the grant persists. User approves the
-    /// SecurityAgent prompt once ("Always Allow").
+    /// Prefer TOKEN MASTER's own OAuth token (its own rate budget → near-live).
+    /// Fall back to the Claude Code CLI token if the user hasn't signed in.
     private func oauthToken() -> String? {
+        if let own = ClaudeOAuth.shared.validAccessToken() { return own }
+        return cliToken()
+    }
+
+    /// Reads the OAuth access token from the Keychain item Claude Code created,
+    /// via `/usr/bin/security` (a stable accessor whose grant survives rebuilds).
+    private func cliToken() -> String? {
         for lookup in [["-s", "Claude Code-credentials"], ["-a", "Claude Code-credentials"]] {
             guard let data = runSecurity(["find-generic-password"] + lookup + ["-w"]),
                   let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
