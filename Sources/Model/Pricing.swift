@@ -35,6 +35,8 @@ struct Pricing {
 
     func hasRate(for source: UsageEvent.Source) -> Bool { rates[source] != nil }
 
+    func inputRate(for source: UsageEvent.Source) -> Double? { rates[source]?.input }
+
     /// Cost in USD for one event's token movement.
     func cost(of e: UsageEvent) -> Double {
         guard let r = rates[e.source] else { return 0 }

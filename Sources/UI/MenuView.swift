@@ -3,6 +3,7 @@ import AppKit
 
 struct MenuView: View {
     @Bindable var store: UsageStore
+    @Environment(\.openWindow) private var openWindow
     @State private var applied: [UUID: String] = [:]
     @State private var applyError: [UUID: String] = [:]
 
@@ -17,7 +18,7 @@ struct MenuView: View {
             Divider()
             healthSection
             Divider()
-            recommendationsSection
+            optimizeSection
             Divider()
             footer
         }
@@ -41,17 +42,22 @@ struct MenuView: View {
     // MARK: Per-source meters (the glanceable headline)
 
     private func meterRow(_ s: UsageEvent.Source, letter: String) -> some View {
-        let used = store.window5hTokens(source: s)
-        let budget = store.budget(s)
         let status = store.status(s)
+        let live = store.isLive(s)
+        let used = store.window5hTokens(source: s)
         return VStack(spacing: 5) {
             HStack(spacing: 10) {
                 RingGauge(fraction: store.fraction(s), status: status,
                           letter: letter, size: 30, lineWidth: 4)
                 VStack(alignment: .leading, spacing: 1) {
-                    Text(s.display).font(.subheadline).bold()
-                    Text("\(Format.compact(used)) / \(Format.compact(budget)) · \(Format.percent(store.fraction(s)))")
-                        .font(.caption).foregroundStyle(.secondary).monospacedDigit()
+                    HStack(spacing: 5) {
+                        Text(s.display).font(.subheadline).bold()
+                        Text(store.percentText(s))
+                            .font(.subheadline).bold().foregroundStyle(status.color)
+                            .monospacedDigit()
+                    }
+                    Text(subtitle(s, used: used, live: live))
+                        .font(.caption2).foregroundStyle(.secondary).monospacedDigit()
                 }
                 Spacer()
                 VStack(alignment: .trailing, spacing: 1) {
@@ -63,6 +69,21 @@ struct MenuView: View {
             ProgressView(value: store.fraction(s))
                 .tint(status.color)
         }
+    }
+
+    /// Secondary line: 7-day util when live, plus this-window token volume; or a
+    /// fallback note when the provider number isn't available.
+    private func subtitle(_ s: UsageEvent.Source, used: Int, live: Bool) -> String {
+        if live {
+            var parts = ["5h window"]
+            if let week = store.sevenDayUtilization(s) { parts.append("7d \(Int(week.rounded()))%") }
+            parts.append("\(Format.compact(used)) tok")
+            return parts.joined(separator: " · ")
+        }
+        if let note = store.providerUsage(s).note {
+            return "estimate — \(note)"
+        }
+        return "estimate · \(Format.compact(used)) / \(Format.compact(store.budget(s))) tok"
     }
 
     // MARK: Windows
@@ -116,54 +137,40 @@ struct MenuView: View {
         }
     }
 
-    // MARK: Recommendations
+    // MARK: Optimize teaser
 
-    private var recommendationsSection: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text("Recommendations").font(.caption).bold().foregroundStyle(.secondary)
-            if store.recommendations.isEmpty {
-                Text("Nothing to suggest — usage looks efficient.")
-                    .font(.caption2).foregroundStyle(.secondary)
-            } else {
-                ForEach(store.recommendations) { rec in
-                    recommendationRow(rec)
-                }
-            }
-        }
-    }
-
-    private func recommendationRow(_ rec: Recommendation) -> some View {
-        VStack(alignment: .leading, spacing: 3) {
-            Text(rec.title).font(.caption).bold()
-            Text(rec.rationale).font(.caption2).foregroundStyle(.secondary)
+    private var optimizeSection: some View {
+        let optimizer = Optimizer(store: store)
+        let saved = optimizer.totalSavedTokens()
+        return Button {
+            openWindow(id: "optimizer")
+            NSApp.activate(ignoringOtherApps: true)
+        } label: {
             HStack {
-                Text(rec.estimatedSaving).font(.caption2).foregroundStyle(.tertiary)
-                Spacer()
-                if let apply = rec.apply {
-                    Button("Apply") {
-                        do { applied[rec.id] = try apply(); applyError[rec.id] = nil }
-                        catch { applyError[rec.id] = error.localizedDescription }
-                    }
-                    .buttonStyle(.borderless).font(.caption2)
+                Image(systemName: "bolt.fill").foregroundStyle(.green)
+                VStack(alignment: .leading, spacing: 1) {
+                    Text("Optimize").font(.caption).bold()
+                    Text(saved > 0 ? "≈ \(Format.compact(saved)) tokens saved so far"
+                                   : "Apply token-saving changes")
+                        .font(.caption2).foregroundStyle(.secondary)
                 }
+                Spacer()
+                Image(systemName: "chevron.right").font(.caption2).foregroundStyle(.tertiary)
             }
-            if let msg = applied[rec.id] {
-                Text(msg).font(.caption2).foregroundStyle(.green)
-            }
-            if let err = applyError[rec.id] {
-                Text(err).font(.caption2).foregroundStyle(.red)
-            }
+            .contentShape(Rectangle())
         }
+        .buttonStyle(.plain)
         .padding(8)
-        .background(.quaternary.opacity(0.5), in: RoundedRectangle(cornerRadius: 6))
+        .background(.green.opacity(0.10), in: RoundedRectangle(cornerRadius: 6))
     }
 
     // MARK: Footer
 
     private var footer: some View {
-        HStack {
+        HStack(spacing: 10) {
             Button("Refresh") { store.refresh(); store.updateHealthAndAdvice() }
                 .font(.caption2)
+            SettingsLink { Text("Settings").font(.caption2) }
             Spacer()
             Button("Repo") {
                 if let url = URL(string: "https://github.com/Synckser/TOKEN-MASTER") {

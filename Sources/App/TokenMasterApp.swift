@@ -13,6 +13,12 @@ struct TokenMasterApp: App {
         }
         .menuBarExtraStyle(.window)
 
+        Window("TOKEN MASTER — Optimize", id: "optimizer") {
+            OptimizerView(store: store)
+        }
+        .defaultSize(width: 480, height: 660)
+        .windowResizability(.contentMinSize)
+
         Settings {
             SettingsView()
         }
