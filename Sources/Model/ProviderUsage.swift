@@ -1,13 +1,13 @@
 import Foundation
 
 /// One rate-limit window's real utilization, as reported by the provider itself.
-struct WindowUsage {
+struct WindowUsage: Codable {
     let utilization: Double   // percent, 0…100+ (provider's own number)
     let resetsAt: Date?
 }
 
 /// A provider's real usage, straight from its own accounting (not reconstructed).
-struct ProviderUsage {
+struct ProviderUsage: Codable {
     let fiveHour: WindowUsage?
     let sevenDay: WindowUsage?
     let live: Bool            // true = fetched successfully this cycle

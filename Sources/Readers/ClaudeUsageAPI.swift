@@ -29,6 +29,10 @@ final class ClaudeUsageAPI: @unchecked Sendable {
                 result = ProviderUsage(fiveHour: nil, sevenDay: nil, live: false, note: "re-login")
                 return
             }
+            if code == 429 {
+                result = ProviderUsage(fiveHour: nil, sevenDay: nil, live: false, note: "rate_limited")
+                return
+            }
             guard code == 200, let data,
                   let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
             else { return }
@@ -49,13 +53,15 @@ final class ClaudeUsageAPI: @unchecked Sendable {
     }
 
     /// Reads the OAuth access token from the Keychain item Claude Code created.
-    /// This reads the secret (needs it for the Bearer), so macOS prompts for access
-    /// on first run — choose "Always Allow".
+    ///
+    /// We shell out to `/usr/bin/security` rather than use SecItem directly: the
+    /// keychain ACL trusts the *accessing binary*, and an unsigned app's identity
+    /// changes on every rebuild (so "Always Allow" never sticks). `security` is a
+    /// stable, already-trusted accessor, so the grant persists. User approves the
+    /// SecurityAgent prompt once ("Always Allow").
     private func oauthToken() -> String? {
-        for query in keychainQueries() {
-            var item: CFTypeRef?
-            guard SecItemCopyMatching(query as CFDictionary, &item) == errSecSuccess,
-                  let data = item as? Data,
+        for lookup in [["-s", "Claude Code-credentials"], ["-a", "Claude Code-credentials"]] {
+            guard let data = runSecurity(["find-generic-password"] + lookup + ["-w"]),
                   let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
             else { continue }
             let holder = (obj["claudeAiOauth"] as? [String: Any]) ?? obj
@@ -66,15 +72,17 @@ final class ClaudeUsageAPI: @unchecked Sendable {
         return nil
     }
 
-    private func keychainQueries() -> [[String: Any]] {
-        let base: [String: Any] = [
-            kSecClass as String: kSecClassGenericPassword,
-            kSecReturnData as String: true,
-            kSecMatchLimit as String: kSecMatchLimitOne
-        ]
-        return [
-            base.merging([kSecAttrService as String: "Claude Code-credentials"]) { _, b in b },
-            base.merging([kSecAttrAccount as String: "Claude Code-credentials"]) { _, b in b }
-        ]
+    private func runSecurity(_ args: [String]) -> Data? {
+        let proc = Process()
+        proc.executableURL = URL(fileURLWithPath: "/usr/bin/security")
+        proc.arguments = args
+        let out = Pipe()
+        proc.standardOutput = out
+        proc.standardError = Pipe()
+        do { try proc.run() } catch { return nil }
+        let data = out.fileHandleForReading.readDataToEndOfFile()
+        proc.waitUntilExit()
+        guard proc.terminationStatus == 0 else { return nil }
+        return data
     }
 }

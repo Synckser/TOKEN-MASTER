@@ -35,17 +35,22 @@ final class UsageStore {
     @ObservationIgnored private var timer: Timer?
     @ObservationIgnored private var tickTimer: Timer?
     @ObservationIgnored private var resetWork: DispatchWorkItem?
-    @ObservationIgnored private var resetRetries = 0
     @ObservationIgnored private let scanQueue = DispatchQueue(label: "tokenmaster.scan")
 
     private let retention: TimeInterval = 7 * 86_400
     @ObservationIgnored private var started = false
     @ObservationIgnored private var lastUsageFetch: Date?
-    private let usageMinInterval: TimeInterval = 60  // the usage API is rate-limited
+    @ObservationIgnored private var usageBackoffUntil: Date?
+    private let usageMinInterval: TimeInterval = 600   // usage API quota is low — poll gently
+    private let usageBackoff: TimeInterval = 1800      // 30-min cool-down after a 429
+    @ObservationIgnored private let claudeUsageCache = FileManager.default
+        .urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+        .appendingPathComponent("TokenMaster/claude_usage.json")
 
     // MARK: Lifecycle
 
     init() {
+        loadClaudeUsageCache()
         start()
     }
 
@@ -83,8 +88,11 @@ final class UsageStore {
         let api = claudeAPI, crl = codexRateLimit
         // Throttle the rate-limited Claude usage API; force bypasses it (manual
         // refresh, and the fetch scheduled at the exact reset instant).
-        let doClaudeUsage = force || lastUsageFetch == nil
-            || Date().timeIntervalSince(lastUsageFetch!) >= usageMinInterval
+        // Respect a 429 cool-down even on a forced refresh (forcing again only
+        // deepens the rate limit). Otherwise: force, first run, or interval elapsed.
+        let inBackoff = usageBackoffUntil.map { Date() < $0 } ?? false
+        let doClaudeUsage = !inBackoff && (force || lastUsageFetch == nil
+            || Date().timeIntervalSince(lastUsageFetch!) >= usageMinInterval)
         if doClaudeUsage { lastUsageFetch = Date() }
 
         scanQueue.async {
@@ -93,27 +101,38 @@ final class UsageStore {
             let codexReal = crl.fetch()
             DispatchQueue.main.async {
                 self.ingest(fresh)
-                // Keep last good value if a cycle is skipped or fails transiently.
-                if let claudeReal, claudeReal.live || self.claudeUsage.fiveHour == nil {
-                    self.claudeUsage = claudeReal
+                if let claudeReal {
+                    if claudeReal.note == "rate_limited" {
+                        // Back off hard; keep showing the last good value.
+                        self.usageBackoffUntil = Date().addingTimeInterval(self.usageBackoff)
+                    } else if claudeReal.live || self.claudeUsage.fiveHour == nil {
+                        self.claudeUsage = claudeReal
+                        self.usageBackoffUntil = nil
+                        if claudeReal.live { self.saveClaudeUsageCache(claudeReal) }
+                    }
                 }
                 if codexReal.live || self.codexUsage.fiveHour == nil {
                     self.codexUsage = codexReal
                 }
-                // If a forced (reset-time) fetch didn't land a live value, retry
-                // a few times — the endpoint may be briefly rate-limited at reset.
-                if force {
-                    if claudeReal?.live == true { self.resetRetries = 0 }
-                    else if self.resetRetries < 3 {
-                        self.resetRetries += 1
-                        DispatchQueue.main.asyncAfter(deadline: .now() + 20) {
-                            self.refresh(force: true)
-                        }
-                    }
-                }
                 self.scheduleResetFetch()
             }
         }
+    }
+
+    // Persist the last good Claude usage so the app shows the real number across
+    // launches (and while the rate-limited endpoint is cooling down), never a
+    // bogus estimate once it has fetched successfully at least once.
+    private func loadClaudeUsageCache() {
+        guard let data = try? Data(contentsOf: claudeUsageCache) else { return }
+        let dec = JSONDecoder(); dec.dateDecodingStrategy = .iso8601
+        if let u = try? dec.decode(ProviderUsage.self, from: data) { claudeUsage = u }
+    }
+
+    private func saveClaudeUsageCache(_ u: ProviderUsage) {
+        let enc = JSONEncoder(); enc.dateEncodingStrategy = .iso8601
+        try? FileManager.default.createDirectory(
+            at: claudeUsageCache.deletingLastPathComponent(), withIntermediateDirectories: true)
+        if let data = try? enc.encode(u) { try? data.write(to: claudeUsageCache) }
     }
 
     /// Schedules one forced fetch just after the next window rollover, so the app
