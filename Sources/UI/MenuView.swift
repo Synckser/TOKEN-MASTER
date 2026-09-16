@@ -10,11 +10,12 @@ struct MenuView: View {
         VStack(alignment: .leading, spacing: 12) {
             header
             Divider()
-            meter
+            meterRow(.claude, letter: "C")
+            meterRow(.codex, letter: "G")
+            Divider()
             windowBreakdown
             Divider()
             healthSection
-            resetSection
             Divider()
             recommendationsSection
             Divider()
@@ -37,31 +38,31 @@ struct MenuView: View {
         }
     }
 
-    // MARK: Meter
+    // MARK: Per-source meters (the glanceable headline)
 
-    private var meter: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Text("Current 5h window").font(.caption).foregroundStyle(.secondary)
-            HStack(alignment: .firstTextBaseline, spacing: 8) {
-                Text(Format.compact(store.window5hTokens))
-                    .font(.system(size: 30, weight: .semibold, design: .rounded))
-                    .monospacedDigit()
-                Text("tokens").font(.caption).foregroundStyle(.secondary)
-            }
+    private func meterRow(_ s: UsageEvent.Source, letter: String) -> some View {
+        let used = store.window5hTokens(source: s)
+        let budget = store.budget(s)
+        let status = store.status(s)
+        return VStack(spacing: 5) {
             HStack(spacing: 10) {
-                sourceChip(.claude, store.window5hTokens(source: .claude))
-                sourceChip(.codex, store.window5hTokens(source: .codex))
+                RingGauge(fraction: store.fraction(s), status: status,
+                          letter: letter, size: 30, lineWidth: 4)
+                VStack(alignment: .leading, spacing: 1) {
+                    Text(s.display).font(.subheadline).bold()
+                    Text("\(Format.compact(used)) / \(Format.compact(budget)) · \(Format.percent(store.fraction(s)))")
+                        .font(.caption).foregroundStyle(.secondary).monospacedDigit()
+                }
+                Spacer()
+                VStack(alignment: .trailing, spacing: 1) {
+                    Text(status.text).font(.caption2).bold().foregroundStyle(status.color)
+                    Text("resets ~\(ResetEstimator.countdownString(to: store.nextReset(s)))")
+                        .font(.caption2).foregroundStyle(.secondary).monospacedDigit()
+                }
             }
+            ProgressView(value: store.fraction(s))
+                .tint(status.color)
         }
-    }
-
-    private func sourceChip(_ s: UsageEvent.Source, _ n: Int) -> some View {
-        HStack(spacing: 4) {
-            Text(s.display).font(.caption2).foregroundStyle(.secondary)
-            Text(Format.compact(n)).font(.caption2).monospacedDigit()
-        }
-        .padding(.horizontal, 6).padding(.vertical, 2)
-        .background(.quaternary, in: Capsule())
     }
 
     // MARK: Windows
@@ -112,17 +113,6 @@ struct MenuView: View {
         case .green: return .green
         case .amber: return .orange
         case .red:   return .red
-        }
-    }
-
-    // MARK: Reset
-
-    private var resetSection: some View {
-        HStack {
-            Text("Next reset (est.)").font(.caption).foregroundStyle(.secondary)
-            Spacer()
-            Text(ResetEstimator.countdownString(to: store.nextClaudeReset))
-                .font(.caption).monospacedDigit()
         }
     }
 

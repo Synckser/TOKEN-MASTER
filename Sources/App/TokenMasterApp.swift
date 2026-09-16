@@ -7,9 +7,9 @@ struct TokenMasterApp: App {
     var body: some Scene {
         MenuBarExtra {
             MenuView(store: store)
-                .task { store.start() }
+                .task { store.refresh(); store.updateHealthAndAdvice() }
         } label: {
-            Text(store.menuBarLabel)
+            MenuBarLabel(store: store)
         }
         .menuBarExtraStyle(.window)
 

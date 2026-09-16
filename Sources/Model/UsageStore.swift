@@ -26,10 +26,18 @@ final class UsageStore {
     @ObservationIgnored private let scanQueue = DispatchQueue(label: "tokenmaster.scan")
 
     private let retention: TimeInterval = 7 * 86_400
+    @ObservationIgnored private var started = false
 
     // MARK: Lifecycle
 
+    init() {
+        start()
+    }
+
     func start() {
+        guard !started else { return }
+        started = true
+
         refresh()
         updateHealthAndAdvice()
 
@@ -121,15 +129,40 @@ final class UsageStore {
         return pricing.cost(of: events(source: source, since: Date().addingTimeInterval(-retention)))
     }
 
+    // MARK: Budget / status (drives the colored meters)
+
+    func budget(_ source: UsageEvent.Source) -> Int {
+        Prefs.shared.budget(for: source)
+    }
+
+    /// Consumption as a fraction of budget, unclamped (can exceed 1.0).
+    func ratio(_ source: UsageEvent.Source) -> Double {
+        let b = budget(source)
+        guard b > 0 else { return 0 }
+        return Double(window5hTokens(source: source)) / Double(b)
+    }
+
+    /// Ring-fill fraction, clamped to 0…1.
+    func fraction(_ source: UsageEvent.Source) -> Double {
+        min(1.0, max(0.0, ratio(source)))
+    }
+
+    func status(_ source: UsageEvent.Source) -> UsageStatus {
+        let r = ratio(source)
+        if r >= Prefs.shared.dangerThreshold { return .danger }
+        if r >= Prefs.shared.cautionThreshold { return .caution }
+        return .ok
+    }
+
     // MARK: Reset estimate
 
-    var nextClaudeReset: Date? {
+    func nextReset(_ source: UsageEvent.Source) -> Date? {
         ResetEstimator.nextReset(
-            events: events.filter { $0.source == .claude },
+            events: events.filter { $0.source == source },
             window: ResetEstimator.fiveHours)
     }
 
-    // MARK: Menu-bar label
+    // MARK: Menu-bar text (fallback / accessibility)
 
     var menuBarLabel: String {
         "🪙 " + Format.compact(window5hTokens)
