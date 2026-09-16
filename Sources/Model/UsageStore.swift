@@ -16,6 +16,10 @@ final class UsageStore {
     private(set) var claudeUsage: ProviderUsage = .unavailable
     private(set) var codexUsage: ProviderUsage = .unavailable
 
+    /// Ticks every second so reset countdowns move live and the window flips
+    /// exactly when `resets_at` passes.
+    private(set) var now: Date = Date()
+
     // All-time accumulators (survive event pruning; reset per launch).
     private(set) var allTimeTokens: [UsageEvent.Source: Int] = [:]
 
@@ -29,6 +33,9 @@ final class UsageStore {
     @ObservationIgnored private let pricing = Pricing.loadBundled()
     @ObservationIgnored private var watcher: FileWatcher?
     @ObservationIgnored private var timer: Timer?
+    @ObservationIgnored private var tickTimer: Timer?
+    @ObservationIgnored private var resetWork: DispatchWorkItem?
+    @ObservationIgnored private var resetRetries = 0
     @ObservationIgnored private let scanQueue = DispatchQueue(label: "tokenmaster.scan")
 
     private let retention: TimeInterval = 7 * 86_400
@@ -62,15 +69,21 @@ final class UsageStore {
                 self?.updateHealthAndAdvice()
             }
         }
+
+        // 1s tick: live countdowns + exact window flip at resets_at.
+        tickTimer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] _ in
+            Task { @MainActor in self?.now = Date() }
+        }
     }
 
     // MARK: Refresh
 
-    func refresh() {
+    func refresh(force: Bool = false) {
         let c = claudeReader, x = codexReader
         let api = claudeAPI, crl = codexRateLimit
-        // Throttle the rate-limited Claude usage API; Codex is a cheap local read.
-        let doClaudeUsage = lastUsageFetch == nil
+        // Throttle the rate-limited Claude usage API; force bypasses it (manual
+        // refresh, and the fetch scheduled at the exact reset instant).
+        let doClaudeUsage = force || lastUsageFetch == nil
             || Date().timeIntervalSince(lastUsageFetch!) >= usageMinInterval
         if doClaudeUsage { lastUsageFetch = Date() }
 
@@ -87,8 +100,35 @@ final class UsageStore {
                 if codexReal.live || self.codexUsage.fiveHour == nil {
                     self.codexUsage = codexReal
                 }
+                // If a forced (reset-time) fetch didn't land a live value, retry
+                // a few times — the endpoint may be briefly rate-limited at reset.
+                if force {
+                    if claudeReal?.live == true { self.resetRetries = 0 }
+                    else if self.resetRetries < 3 {
+                        self.resetRetries += 1
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 20) {
+                            self.refresh(force: true)
+                        }
+                    }
+                }
+                self.scheduleResetFetch()
             }
         }
+    }
+
+    /// Schedules one forced fetch just after the next window rollover, so the app
+    /// updates at the same moment the provider's own app does.
+    private func scheduleResetFetch() {
+        resetWork?.cancel()
+        let resets = [adjustedFiveHour(.claude)?.resetsAt,
+                      adjustedFiveHour(.codex)?.resetsAt]
+            .compactMap { $0 }
+            .filter { $0 > Date() }
+        guard let next = resets.min() else { return }
+        let work = DispatchWorkItem { [weak self] in self?.refresh(force: true) }
+        resetWork = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + max(1, next.timeIntervalSinceNow + 2),
+                                      execute: work)
     }
 
     private func ingest(_ fresh: [UsageEvent]) {
@@ -160,9 +200,20 @@ final class UsageStore {
         source == .claude ? claudeUsage : codexUsage
     }
 
+    /// The 5h window, rolled forward locally once `resets_at` passes so the reset
+    /// shows at the exact instant (matching the provider's app) without waiting
+    /// for the next network poll. A forced fetch then confirms the real number.
+    func adjustedFiveHour(_ source: UsageEvent.Source) -> WindowUsage? {
+        guard let w = providerUsage(source).fiveHour else { return nil }
+        guard let r = w.resetsAt, now >= r else { return w }
+        var next = r
+        while next <= now { next = next.addingTimeInterval(ResetEstimator.fiveHours) }
+        return WindowUsage(utilization: 0, resetsAt: next)
+    }
+
     /// Provider-reported 5h utilization percent (0…100+), nil if unavailable.
     func utilization(_ source: UsageEvent.Source) -> Double? {
-        providerUsage(source).fiveHour?.utilization
+        adjustedFiveHour(source)?.utilization
     }
 
     /// True when the number is the provider's own (not a token-budget fallback).
@@ -201,7 +252,7 @@ final class UsageStore {
     // MARK: Reset (real timestamp if provider gave one, else local estimate)
 
     func nextReset(_ source: UsageEvent.Source) -> Date? {
-        if let real = providerUsage(source).fiveHour?.resetsAt { return real }
+        if let real = adjustedFiveHour(source)?.resetsAt { return real }
         return ResetEstimator.nextReset(
             events: events.filter { $0.source == source },
             window: ResetEstimator.fiveHours)

@@ -62,7 +62,7 @@ struct MenuView: View {
                 Spacer()
                 VStack(alignment: .trailing, spacing: 1) {
                     Text(status.text).font(.caption2).bold().foregroundStyle(status.color)
-                    Text("resets ~\(ResetEstimator.countdownString(to: store.nextReset(s)))")
+                    Text("resets ~\(ResetEstimator.countdownString(to: store.nextReset(s), now: store.now))")
                         .font(.caption2).foregroundStyle(.secondary).monospacedDigit()
                 }
             }
@@ -168,7 +168,7 @@ struct MenuView: View {
 
     private var footer: some View {
         HStack(spacing: 10) {
-            Button("Refresh") { store.refresh(); store.updateHealthAndAdvice() }
+            Button("Refresh") { store.refresh(force: true); store.updateHealthAndAdvice() }
                 .font(.caption2)
             SettingsLink { Text("Settings").font(.caption2) }
             Spacer()
