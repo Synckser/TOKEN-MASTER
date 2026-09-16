@@ -20,6 +20,9 @@ final class UsageStore {
     /// exactly when `resets_at` passes.
     private(set) var now: Date = Date()
 
+    /// When the Claude usage number was last confirmed live (for staleness UI).
+    private(set) var claudeUsageAsOf: Date?
+
     // All-time accumulators (survive event pruning; reset per launch).
     private(set) var allTimeTokens: [UsageEvent.Source: Int] = [:]
 
@@ -108,7 +111,10 @@ final class UsageStore {
                     } else if claudeReal.live || self.claudeUsage.fiveHour == nil {
                         self.claudeUsage = claudeReal
                         self.usageBackoffUntil = nil
-                        if claudeReal.live { self.saveClaudeUsageCache(claudeReal) }
+                        if claudeReal.live {
+                            self.claudeUsageAsOf = Date()
+                            self.saveClaudeUsageCache(claudeReal, asOf: Date())
+                        }
                     }
                 }
                 if codexReal.live || self.codexUsage.fiveHour == nil {
@@ -122,17 +128,31 @@ final class UsageStore {
     // Persist the last good Claude usage so the app shows the real number across
     // launches (and while the rate-limited endpoint is cooling down), never a
     // bogus estimate once it has fetched successfully at least once.
+    private struct CachedUsage: Codable { let usage: ProviderUsage; let asOf: Date }
+
     private func loadClaudeUsageCache() {
         guard let data = try? Data(contentsOf: claudeUsageCache) else { return }
         let dec = JSONDecoder(); dec.dateDecodingStrategy = .iso8601
-        if let u = try? dec.decode(ProviderUsage.self, from: data) { claudeUsage = u }
+        if let c = try? dec.decode(CachedUsage.self, from: data) {
+            claudeUsage = c.usage
+            claudeUsageAsOf = c.asOf
+        } else if let u = try? dec.decode(ProviderUsage.self, from: data) {
+            claudeUsage = u  // legacy format
+        }
     }
 
-    private func saveClaudeUsageCache(_ u: ProviderUsage) {
+    private func saveClaudeUsageCache(_ u: ProviderUsage, asOf: Date) {
         let enc = JSONEncoder(); enc.dateEncodingStrategy = .iso8601
         try? FileManager.default.createDirectory(
             at: claudeUsageCache.deletingLastPathComponent(), withIntermediateDirectories: true)
-        if let data = try? enc.encode(u) { try? data.write(to: claudeUsageCache) }
+        if let data = try? enc.encode(CachedUsage(usage: u, asOf: asOf)) {
+            try? data.write(to: claudeUsageCache)
+        }
+    }
+
+    /// Age of the Claude number in seconds, or nil if never fetched live.
+    func claudeUsageAge() -> TimeInterval? {
+        claudeUsageAsOf.map { now.timeIntervalSince($0) }
     }
 
     /// Schedules one forced fetch just after the next window rollover, so the app

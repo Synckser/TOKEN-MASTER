@@ -45,6 +45,12 @@ struct MenuView: View {
         let status = store.status(s)
         let live = store.isLive(s)
         let used = store.window5hTokens(source: s)
+        // Staleness tag (Claude only; Codex is always a fresh local read).
+        let ageText: String? = {
+            guard s == .claude, live else { return nil }
+            guard let age = store.claudeUsageAge() else { return "not live" }
+            return age > 720 ? "\(Int(age / 60))m ago" : nil
+        }()
         return VStack(spacing: 5) {
             HStack(spacing: 10) {
                 RingGauge(fraction: store.fraction(s), status: status,
@@ -55,6 +61,9 @@ struct MenuView: View {
                         Text(store.percentText(s))
                             .font(.subheadline).bold().foregroundStyle(status.color)
                             .monospacedDigit()
+                        if let ageText {
+                            Text(ageText).font(.caption2).foregroundStyle(.orange)
+                        }
                     }
                     Text(subtitle(s, used: used, live: live))
                         .font(.caption2).foregroundStyle(.secondary).monospacedDigit()
