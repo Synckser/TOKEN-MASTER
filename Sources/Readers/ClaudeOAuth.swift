@@ -95,6 +95,9 @@ final class ClaudeOAuth: @unchecked Sendable {
         var req = URLRequest(url: URL(string: tokenURL)!, timeoutInterval: 20)
         req.httpMethod = "POST"
         req.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        // console.anthropic.com is behind Cloudflare, which bans default client
+        // signatures (error 1010). Present a browser-like User-Agent.
+        req.setValue(Self.userAgent, forHTTPHeaderField: "User-Agent")
         req.httpBody = try JSONSerialization.data(withJSONObject: body)
 
         var result: Tokens?
@@ -136,6 +139,10 @@ final class ClaudeOAuth: @unchecked Sendable {
     private func err(_ m: String) -> NSError {
         NSError(domain: "ClaudeOAuth", code: 1, userInfo: [NSLocalizedDescriptionKey: m])
     }
+
+    static let userAgent =
+        "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 "
+        + "(KHTML, like Gecko) Version/17.0 Safari/605.1.15"
 
     static func randomURLSafe(_ n: Int) -> String {
         var b = [UInt8](repeating: 0, count: n)
