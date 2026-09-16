@@ -8,3 +8,4 @@ xcuserdata/
 
 # xcodegen regenerates this; keep project.yml as source of truth.
 # (Committed anyway so the repo opens in Xcode without xcodegen.)
+TokenMaster.app
