@@ -1,0 +1,45 @@
+name: TokenMaster
+options:
+  bundleIdPrefix: com.roberto
+  deploymentTarget:
+    macOS: "14.0"
+  createIntermediateGroups: true
+settings:
+  base:
+    MARKETING_VERSION: "1.0"
+    CURRENT_PROJECT_VERSION: "1"
+    SWIFT_VERSION: "5.0"
+    PRODUCT_BUNDLE_IDENTIFIER: com.roberto.TokenMaster
+    PRODUCT_NAME: TokenMaster
+    CODE_SIGN_IDENTITY: "-"
+    CODE_SIGNING_REQUIRED: "NO"
+    CODE_SIGNING_ALLOWED: "NO"
+    ENABLE_HARDENED_RUNTIME: "NO"
+targets:
+  TokenMaster:
+    type: application
+    platform: macOS
+    sources:
+      - Sources/App
+      - Sources/UI
+      - Sources/Readers
+      - Sources/Model
+      - Sources/Watch
+      - Sources/Health
+      - Sources/Advisor
+    resources:
+      - Sources/Resources
+    entitlements:
+      path: Sources/TokenMaster.entitlements
+      properties:
+        com.apple.security.app-sandbox: false
+    info:
+      path: Sources/Info.plist
+      properties:
+        LSUIElement: true
+        CFBundleName: TokenMaster
+        CFBundleDisplayName: TOKEN MASTER
+        LSMinimumSystemVersion: "14.0"
+        NSHumanReadableCopyright: "TOKEN MASTER — local token meter"
+        NSSupportsAutomaticTermination: false
+        NSSupportsSuddenTermination: false
