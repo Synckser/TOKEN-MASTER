@@ -4,14 +4,33 @@ A native macOS menu-bar app that meters your **LLM token usage** in real time an
 helps you cut it. Built for people who run **Claude Code** and **Codex/ChatGPT**
 heavily and want a right-hand man in the menu bar.
 
-- **Live meter** — tokens used in the current rolling 5-hour window, updating within
-  seconds as you work (FSEvents + timer).
-- **Windows** — today, last 7 days, per-source (Claude vs Codex) split, cache-hit
-  ratio, thinking share, and optional cost estimate.
+- **Accurate live meter** — the current 5-hour utilization **as each provider reports
+  it** (same number the Claude/ChatGPT apps show), not a reconstruction. Two colored
+  clock-ring gauges in the menu bar (green → blue → red), updating as you work.
+- **Real reset countdown** — the provider's own `resets_at`, not a guess.
+- **Windows** — today, last 7 days, per-source split, cache-hit ratio, thinking share,
+  optional cost estimate (token sums, as secondary detail).
 - **Health** — two lights: are Claude Code and Codex logged in and active?
-- **Next reset (estimate)** — local rolling-window countdown, clearly labelled.
-- **Advisor** — opt-in, one-click recommendations that cut token burn. Never
-  autonomous; every file-touching action backs up first (`.bak`) and is reversible.
+- **Optimizer** — a dedicated window with two sections (Claude / ChatGPT-Codex) of
+  research-backed, applyable, reversible token-saving changes, plus a **savings ledger**
+  that tracks how many tokens each change has saved. Opt-in only; file changes back up
+  first (`.bak`).
+
+## Accuracy — where the numbers come from
+
+The headline % is read straight from each provider, so it matches their own app:
+
+| Tool | Source | Fields |
+|------|--------|--------|
+| Claude | `GET api.anthropic.com/api/oauth/usage` (Bearer = Keychain `Claude Code-credentials`, `anthropic-beta: oauth-2025-04-20`) | `five_hour.utilization`, `seven_day.utilization`, `resets_at` |
+| ChatGPT/Codex | newest `~/.codex/sessions/**/rollout-*.jsonl` → `payload.rate_limits` | `primary.used_percent` (5h), `secondary.used_percent` (7d), `resets_at` |
+
+Claude needs one Keychain grant ("Always Allow") the first time — an unsigned dev
+build re-prompts each rebuild; a signed release (phase 2) makes it stick. The Claude
+usage API is rate-limited, so the app polls it at most once per 60s and keeps the last
+good value between polls. If the number can't be fetched it falls back to a token-vs-
+budget **estimate**, clearly labelled. Codex needs no token and no network — it reads
+the rate-limit snapshot Codex already logs locally.
 
 Everything runs locally. It reads only your own log files under `~/.claude` and
 `~/.codex`; **nothing leaves your Mac.**
